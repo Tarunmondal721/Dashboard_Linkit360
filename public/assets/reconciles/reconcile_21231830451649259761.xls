@@ -1,0 +1,21 @@
+<div id="cpReportData_divReportData" style="width: 100%;">
+       
+    <table>
+	<tr class="head1">
+		<th align="center" width="10%">Day(s)</th><th align="center" width="10%">Exam Session</th><th align="center" width="10%">Module Code</th><th align="center" width="70%">Module Name</th>
+	</tr><tr class="sample2">
+		<td colspan="4" width="35%"><b>Theory Papers<font style='color:red'>(Exact date and time of the examination will be communicated separately)</font></b></td>
+	</tr><tr class="gdalternate1">
+		<td align="center" width="5%">17-Jan-2022</td><td align="left" width="3%">Afternoon</td><td align="left" width="5%">M1-R5</td><td align="left" width="20%">Information Technology Tools and Network Basics</td>
+	</tr><tr class="gdrow1">
+		<td align="center" width="5%">18-Jan-2022</td><td align="left" width="3%">Afternoon</td><td align="left" width="5%">M2-R5</td><td align="left" width="20%">Web Designing & Publishing</td>
+	</tr><tr class="gdalternate1">
+		<td align="center" width="5%">19-Jan-2022</td><td align="left" width="3%">Afternoon</td><td align="left" width="5%">M3-R5</td><td align="left" width="20%">Programming and Problem Solving through Python</td>
+	</tr><tr class="gdrow1">
+		<td align="center" width="5%">20-Jan-2022</td><td align="left" width="3%">Afternoon</td><td align="left" width="5%">M4-R5</td><td align="left" width="20%">Internet of Things and its Application</td>
+	</tr><tr class="sample2">
+		<td colspan="4" width="35%"><b>Practical Papers<font style='color:red'>(Exact date and time of the examination will be communicated separately)</font></b></td>
+	</tr><tr class="gdalternate1">
+		<td align="center" width="5%">29-Jan-2022<br>To<br>31-Jan-2022</td><td align="left" width="3%">-</td><td align="left" width="5%">PR - 5</td><td align="left" width="20%">PRACTICAL</td>
+	</tr>
+</table></div>

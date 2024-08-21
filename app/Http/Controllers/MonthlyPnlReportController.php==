@@ -1,0 +1,834 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Auth;
+use Illuminate\Support\Collection;
+use Session;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use App\Models\report_summarize;
+use App\Models\Operator;
+use Carbon\Carbon;
+use Illuminate\Support\Arr;
+use App\Models\Company;
+use App\Models\Country;
+use App\Models\CompanyOperators;
+use App\Models\PnlSummeryMonth;
+use App\Models\ReportsPnlsOperatorSummarizes;
+use App\common\Utility;
+use App\common\UtilityReports;
+use App\common\UtilityReportsMonthly;
+
+class MonthlyPnlReportController extends Controller
+{
+	// get operator monthly pnl report 
+    public function MonthlyPnlSummaryOperator(Request $request)
+    {
+        $data['OperatorWise'] = $OperatorWise = 1;
+        $data['Monthly'] = $Monthly = 1;
+        $requestData = $request->all();
+        // dd($requestData);
+        $Country = Country::all()->toArray();
+        $companys = Company::get();
+        // $static_operator =array(1,2,3,4);
+        $countries = array();
+        $sumemry = array();
+
+        if(!empty($Country))
+        {
+            foreach($Country as $CountryI)
+            {
+                $countries[$CountryI['id']]=$CountryI;
+            }
+        }
+
+        $Operators = Operator::Status(1)->get();
+        $staticOperators = $Operators->pluck('id_operator')->toArray();
+
+        $firstDayoftheyear = Carbon::now()->startOfYear()->format('Y-m-d');
+        $start_date = $firstDayoftheyear;
+        $startColumnDateDisplay = $firstDayoftheyear;
+        $end_date = Carbon::now()->format('Y-m-d');
+        $month = Carbon::now()->format('F Y');
+
+        $datesIndividual = Utility::getRangeDates($startColumnDateDisplay,$end_date);
+        $no_of_months = Utility::getRangeMonthsNo($datesIndividual);
+
+        $monthList=array();
+
+        foreach ($no_of_months as $key => $no_of_month) {
+            $month_key =$no_of_month['date'];
+            $monthList[]=$month_key;
+        } 
+
+        $allMonthlyData = PnlSummeryMonth::filteroperator($staticOperators)
+                        ->Months($monthList)
+                        ->User(0)
+                        ->get()->toArray();
+        
+        $reportsMonthData = $this->rearrangeOperatorMonth($allMonthlyData);
+        $monthdata = $reportsMonthData;
+        // dd($monthdata);
+        
+        if(!empty($Operators))
+        {
+            foreach($Operators as $operator)
+            {
+                 $id_operator = $operator->id_operator;
+
+
+                // dd($id_operator);
+                $tmpOperators=array();
+                $tmpOperators['id_operator'] =$operator;
+                if(!isset($reportsMonthData[$id_operator]))
+                {
+                    // if The Operator not founds in that array
+                    continue;
+                }
+               
+
+                // dd($monthdata);
+                // echo "<pre>"; print_r($monthdata); continue;
+
+                $tmpOperators['data'] = $monthdata;
+
+                $country_id  = $operator->country_id;
+                $contain_id = Arr::exists($countries, $country_id);
+                $OperatorCountry = array();
+
+                if($contain_id )
+                {
+                    $tmpOperators['country'] = $countries[$country_id];
+                    $OperatorCountry = $countries[$country_id];
+                }
+
+                $reportsColumnData = $this->getPNLReportsDateWise($operator,$no_of_months,$monthdata,$OperatorCountry);
+                 
+                
+                $tmpOperators['month_string'] = $month;
+
+                $total_avg_rev_usd = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['end_user_rev_usd'],$startColumnDateDisplay,$end_date);
+                $tmpOperators['end_user_rev_usd']['dates'] = $reportsColumnData['end_user_rev_usd'];
+                $tmpOperators['end_user_rev_usd']['total'] = $total_avg_rev_usd['sum'];
+                $tmpOperators['end_user_rev_usd']['t_mo_end'] = $total_avg_rev_usd['T_Mo_End'];
+                $tmpOperators['end_user_rev_usd']['avg'] = $total_avg_rev_usd['avg'];
+
+
+                $total_avg_rev = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['end_user_rev'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['end_user_rev']['dates'] = $reportsColumnData['end_user_rev'];
+                $tmpOperators['end_user_rev']['total'] = $total_avg_rev['sum'];
+                $tmpOperators['end_user_rev']['t_mo_end'] = $total_avg_rev['T_Mo_End'];
+                $tmpOperators['end_user_rev']['avg'] = $total_avg_rev['avg'];
+
+
+                $total_avg_gros_rev_usd = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['gros_rev_usd'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['gros_rev_usd']['dates'] = $reportsColumnData['gros_rev_usd'];
+                $tmpOperators['gros_rev_usd']['total'] = $total_avg_gros_rev_usd['sum'];
+                $tmpOperators['gros_rev_usd']['t_mo_end'] = $total_avg_gros_rev_usd['T_Mo_End'];
+                $tmpOperators['gros_rev_usd']['avg'] = $total_avg_gros_rev_usd['avg'];
+
+
+                $total_avg_gros_rev = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['gros_rev'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['gros_rev']['dates'] = $reportsColumnData['gros_rev'];
+                $tmpOperators['gros_rev']['total'] = $total_avg_gros_rev['sum'];
+                $tmpOperators['gros_rev']['t_mo_end'] = $total_avg_gros_rev['T_Mo_End'];
+                $tmpOperators['gros_rev']['avg'] = $total_avg_gros_rev['avg'];
+
+
+                $total_avg_cost_campaign = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['cost_campaign'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['cost_campaign']['dates'] = $reportsColumnData['cost_campaign'];
+                $tmpOperators['cost_campaign']['total'] = $total_avg_cost_campaign['sum'];
+                $tmpOperators['cost_campaign']['t_mo_end'] = $total_avg_cost_campaign['T_Mo_End'];
+                $tmpOperators['cost_campaign']['avg'] = $total_avg_cost_campaign['avg'];
+
+
+                $total_avg_other_cost = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['other_cost'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['other_cost']['dates'] = $reportsColumnData['other_cost'];
+                $tmpOperators['other_cost']['total'] = $total_avg_other_cost['sum'];
+                $tmpOperators['other_cost']['t_mo_end'] = $total_avg_other_cost['T_Mo_End'];
+                $tmpOperators['other_cost']['avg'] = $total_avg_other_cost['avg'];
+
+
+                $total_avg_hosting_cost = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['hosting_cost'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['hosting_cost']['dates'] = $reportsColumnData['hosting_cost'];
+                $tmpOperators['hosting_cost']['total'] = $total_avg_hosting_cost['sum'];
+                $tmpOperators['hosting_cost']['t_mo_end'] = $total_avg_hosting_cost['T_Mo_End'];
+                $tmpOperators['hosting_cost']['avg'] = $total_avg_hosting_cost['avg'];
+
+
+                $total_avg_content = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['content'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['content']['dates'] = $reportsColumnData['content'];
+                $tmpOperators['content']['total'] = $total_avg_content['sum'];
+                $tmpOperators['content']['t_mo_end'] = $total_avg_content['T_Mo_End'];
+                $tmpOperators['content']['avg'] = $total_avg_content['avg'];
+
+
+                $total_avg_rnd = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['rnd'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['rnd']['dates'] = $reportsColumnData['rnd'];
+                $tmpOperators['rnd']['total'] = $total_avg_rnd['sum'];
+                $tmpOperators['rnd']['t_mo_end'] = $total_avg_rnd['T_Mo_End'];
+                $tmpOperators['rnd']['avg'] = $total_avg_rnd['avg'];
+
+
+                $total_avg_bd = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['bd'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['bd']['dates'] = $reportsColumnData['bd'];
+                $tmpOperators['bd']['total'] = $total_avg_bd['sum'];
+                $tmpOperators['bd']['t_mo_end'] = $total_avg_bd['T_Mo_End'];
+                $tmpOperators['bd']['avg'] = $total_avg_bd['avg'];
+
+
+                $total_avg_platform = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['platform'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['platform']['dates'] = $reportsColumnData['platform'];
+                $tmpOperators['platform']['total'] = $total_avg_platform['sum'];
+                $tmpOperators['platform']['t_mo_end'] = $total_avg_platform['T_Mo_End'];
+                $tmpOperators['platform']['avg'] = $total_avg_platform['avg'];
+
+
+                $total_avg_pnl = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['pnl'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['pnl']['dates'] = $reportsColumnData['pnl'];
+                $tmpOperators['pnl']['total'] = $total_avg_pnl['sum'];
+                $tmpOperators['pnl']['t_mo_end'] = $total_avg_pnl['T_Mo_End'];
+                $tmpOperators['pnl']['avg'] = $total_avg_pnl['avg'];
+
+
+                // dd($tmpOperators);
+                $sumemry[] = $tmpOperators;
+            }
+        }
+
+        // dd($sumemry);
+        $no_of_days = $no_of_months;
+        $sumOfSummaryData = UtilityReports::summaryDataSum($sumemry);
+        // dd($sumOfSummaryData);
+
+        return view('report.monthly_pnlsummary', compact('no_of_days','sumemry','sumOfSummaryData','data'));
+    }
+
+    // get country monthly pnl report
+    public function MonthlyPnlSummaryCountry(Request $request)
+    {
+        $data['CountryWise'] = $OperatorWise = 1;
+        $data['Monthly'] = $Monthly = 1;
+
+        $requestData = $request->all();
+        // dd($requestData);
+        $Country = Country::all();
+        $companys = Company::get();
+        
+        $firstDayoftheyear = Carbon::now()->startOfYear()->format('Y-m-d');
+        $start_date = $firstDayoftheyear;
+        $startColumnDateDisplay = $firstDayoftheyear;
+        $end_date = Carbon::now()->format('Y-m-d');
+        $month = Carbon::now()->format('F Y');
+        $year = Carbon::now()->format('Y');
+
+        $datesIndividual =Utility::getRangeDates($startColumnDateDisplay,$end_date);
+        $no_of_months = Utility::getRangeMonthsNo($datesIndividual);
+
+        $sumemry = array();
+        $sumemry_data = array();
+        $monthList=array();
+
+        foreach ($no_of_months as $key => $no_of_month) {
+            $month_key =$no_of_month['date'];
+            $monthList[]=$month_key;
+        }
+
+        $countries = array();
+        if(!empty($Country))
+        {
+            foreach($Country as $CountryI)
+            {
+                $countries[$CountryI['id']] = $CountryI;
+            }
+        }
+
+        $Operators = Operator::Status(1)->get();
+        $arrayOperatorsIds = $Operators->pluck('id_operator')->toArray();
+        $allMonthlyData = PnlSummeryMonth::filteroperator($arrayOperatorsIds)
+                        ->Months($monthList)
+                        ->User(0)
+                        ->get()->toArray();
+
+        $reportsMonthData = $this->rearrangeOperatorMonth($allMonthlyData);
+        //dd($reportsMonthData);
+        $monthdata = $reportsMonthData;
+
+        if(!empty($Country))
+        {
+            foreach ($Country as $ckey=>$country)
+            {
+                $Operators= $country->operators;
+                //$this->rearrangeOperatorMonth($allMonthlyData);
+
+                if(!empty($Operators))
+                {
+                    foreach($Operators as $operator)
+                    {
+                        if($operator->status == 0)
+                            continue;
+
+                        
+                        $id_operator = $operator->id_operator;
+                        $tmpOperators=array();
+                        $tmpOperators['operator'] =$operator;
+                        // $monthdata = $reportsMonthData[$id_operator];
+                        if(!isset($reportsMonthData[$id_operator]))
+                        {
+                            // if The Operator not founds in that array
+                            continue;
+                        }
+                        //dd($monthdata);
+                        $tmpOperators['data'] =$monthdata;
+                        //dd($tmpOperators);
+                        $country_id  =$operator->country_id;
+                        $contain_id = Arr::exists($countries, $country_id);
+                        $OperatorCountry = array();
+                        if($contain_id )
+                        {
+                            $tmpOperators['country']=$countries[$country_id];
+                            $tmpOperators['country_name']=$countries[$country_id]['country'];
+                            $OperatorCountry = $countries[$country_id];
+                        }
+
+                        $reportsColumnData = $this->getPNLReportsDateWise($operator,$no_of_months,$monthdata,$OperatorCountry);
+                        // dd($reportsColumnData);
+                        $tmpOperators['month_string']=$month;
+
+                        $total_avg_rev_usd = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['end_user_rev_usd'],$startColumnDateDisplay,$end_date);
+                        $tmpOperators['end_user_rev_usd']['dates'] = $reportsColumnData['end_user_rev_usd'];
+                        $tmpOperators['end_user_rev_usd']['total'] = $total_avg_rev_usd['sum'];
+                        $tmpOperators['end_user_rev_usd']['t_mo_end'] = $total_avg_rev_usd['T_Mo_End'];
+                        $tmpOperators['end_user_rev_usd']['avg'] = $total_avg_rev_usd['avg'];
+
+
+                        $total_avg_rev = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['end_user_rev'],$startColumnDateDisplay,$end_date);
+
+                        $tmpOperators['end_user_rev']['dates'] = $reportsColumnData['end_user_rev'];
+                        $tmpOperators['end_user_rev']['total'] = $total_avg_rev['sum'];
+                        $tmpOperators['end_user_rev']['t_mo_end'] = $total_avg_rev['T_Mo_End'];
+                        $tmpOperators['end_user_rev']['avg'] = $total_avg_rev['avg'];
+
+
+                        $total_avg_gros_rev_usd = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['gros_rev_usd'],$startColumnDateDisplay,$end_date);
+
+                        $tmpOperators['gros_rev_usd']['dates'] = $reportsColumnData['gros_rev_usd'];
+                        $tmpOperators['gros_rev_usd']['total'] = $total_avg_gros_rev_usd['sum'];
+                        $tmpOperators['gros_rev_usd']['t_mo_end'] = $total_avg_gros_rev_usd['T_Mo_End'];
+                        $tmpOperators['gros_rev_usd']['avg'] = $total_avg_gros_rev_usd['avg'];
+
+
+                        $total_avg_gros_rev = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['gros_rev'],$startColumnDateDisplay,$end_date);
+
+                        $tmpOperators['gros_rev']['dates'] = $reportsColumnData['gros_rev'];
+                        $tmpOperators['gros_rev']['total'] = $total_avg_gros_rev['sum'];
+                        $tmpOperators['gros_rev']['t_mo_end'] = $total_avg_gros_rev['T_Mo_End'];
+                        $tmpOperators['gros_rev']['avg'] = $total_avg_gros_rev['avg'];
+
+
+                        $total_avg_cost_campaign = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['cost_campaign'],$startColumnDateDisplay,$end_date);
+
+                        $tmpOperators['cost_campaign']['dates'] = $reportsColumnData['cost_campaign'];
+                        $tmpOperators['cost_campaign']['total'] = $total_avg_cost_campaign['sum'];
+                        $tmpOperators['cost_campaign']['t_mo_end'] = $total_avg_cost_campaign['T_Mo_End'];
+                        $tmpOperators['cost_campaign']['avg'] = $total_avg_cost_campaign['avg'];
+
+
+                        $total_avg_other_cost = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['other_cost'],$startColumnDateDisplay,$end_date);
+
+                        $tmpOperators['other_cost']['dates'] = $reportsColumnData['other_cost'];
+                        $tmpOperators['other_cost']['total'] = $total_avg_other_cost['sum'];
+                        $tmpOperators['other_cost']['t_mo_end'] = $total_avg_other_cost['T_Mo_End'];
+                        $tmpOperators['other_cost']['avg'] = $total_avg_other_cost['avg'];
+
+
+                        $total_avg_hosting_cost = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['hosting_cost'],$startColumnDateDisplay,$end_date);
+
+                        $tmpOperators['hosting_cost']['dates'] = $reportsColumnData['hosting_cost'];
+                        $tmpOperators['hosting_cost']['total'] = $total_avg_hosting_cost['sum'];
+                        $tmpOperators['hosting_cost']['t_mo_end'] = $total_avg_hosting_cost['T_Mo_End'];
+                        $tmpOperators['hosting_cost']['avg'] = $total_avg_hosting_cost['avg'];
+
+
+                        $total_avg_content = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['content'],$startColumnDateDisplay,$end_date);
+
+                        $tmpOperators['content']['dates'] = $reportsColumnData['content'];
+                        $tmpOperators['content']['total'] = $total_avg_content['sum'];
+                        $tmpOperators['content']['t_mo_end'] = $total_avg_content['T_Mo_End'];
+                        $tmpOperators['content']['avg'] = $total_avg_content['avg'];
+
+
+                        $total_avg_rnd = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['rnd'],$startColumnDateDisplay,$end_date);
+
+                        $tmpOperators['rnd']['dates'] = $reportsColumnData['rnd'];
+                        $tmpOperators['rnd']['total'] = $total_avg_rnd['sum'];
+                        $tmpOperators['rnd']['t_mo_end'] = $total_avg_rnd['T_Mo_End'];
+                        $tmpOperators['rnd']['avg'] = $total_avg_rnd['avg'];
+
+
+                        $total_avg_bd = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['bd'],$startColumnDateDisplay,$end_date);
+
+                        $tmpOperators['bd']['dates'] = $reportsColumnData['bd'];
+                        $tmpOperators['bd']['total'] = $total_avg_bd['sum'];
+                        $tmpOperators['bd']['t_mo_end'] = $total_avg_bd['T_Mo_End'];
+                        $tmpOperators['bd']['avg'] = $total_avg_bd['avg'];
+
+
+                        $total_avg_platform = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['platform'],$startColumnDateDisplay,$end_date);
+
+                        $tmpOperators['platform']['dates'] = $reportsColumnData['platform'];
+                        $tmpOperators['platform']['total'] = $total_avg_platform['sum'];
+                        $tmpOperators['platform']['t_mo_end'] = $total_avg_platform['T_Mo_End'];
+                        $tmpOperators['platform']['avg'] = $total_avg_platform['avg'];
+
+
+                        $total_avg_pnl = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['pnl'],$startColumnDateDisplay,$end_date);
+
+                        $tmpOperators['pnl']['dates'] = $reportsColumnData['pnl'];
+                        $tmpOperators['pnl']['total'] = $total_avg_pnl['sum'];
+                        $tmpOperators['pnl']['t_mo_end'] = $total_avg_pnl['T_Mo_End'];
+                        $tmpOperators['pnl']['avg'] = $total_avg_pnl['avg'];
+
+
+                        // dd($tmpOperators);
+                        $sumemry[$country->id][$key] = $tmpOperators;
+                    }
+                }
+
+                // dd($sumemry);
+
+                if(sizeof($Operators) > 0 && isset($sumemry[$country->id]))
+                {
+                    $sumemry_datas = UtilityReports::summaryDataSum($sumemry[$country->id]);
+                    $sumemry_country['country'] = $country;
+                    $sumemry_month['year'] = $year;
+                    $sumemry_data[] = array_merge($sumemry_country,$sumemry_month,$sumemry_datas);
+                }
+
+            }
+        }
+
+        $sumemry = $sumemry_data;
+        $allsummaryData = UtilityReports::summaryDataSum($sumemry);
+        $no_of_days = $no_of_months ;
+
+        // dd($sumemry);
+        // dd($no_of_days);
+        // dd($allsummaryData);
+        // dd(12);
+
+        return view('report.monthly_pnlsummary_country',compact('sumemry','no_of_days','allsummaryData','data'));
+    }
+
+    // get company monthly pnl report
+    public function MonthlyPnlSummaryCompany(Request $request)
+    {
+        $data['CompanyWise'] = $CompanyWise = 1;
+        $data['Monthly'] = $Monthly = 1;
+        
+        $sumemry = array();
+        $Country = Country::all()->toArray();
+        $countries = array();
+
+        if(!empty($Country))
+        {
+            foreach($Country as $CountryI)
+            {
+                $countries[$CountryI['id']]=$CountryI;
+            }
+        }
+
+        $Company = Company::all()->toArray();
+        $companies = array();
+
+        if(!empty($Company))
+        {
+            foreach($Company as $companyI)
+            {
+                $companies[$companyI['id']] = $companyI;
+            }
+        }
+
+        $CompanyOperators = CompanyOperators::all()->toArray();
+        $com_operators = array();
+
+        if(!empty($CompanyOperators))
+        {
+            foreach($CompanyOperators as $company_operator)
+            {
+                $operator_id = $company_operator['operator_id'];
+                $company_id = $company_operator['company_id'];
+                $com_operators[$operator_id] = $companies[$company_id];
+            }
+        }
+
+        $Companys = Company::get();
+        $operator_ids = [];
+        
+        if(!empty($Companys))
+        {
+            foreach($Companys as $company)
+            {
+                $com_opt_ids = $company->company_operators;
+                $operator_ids = array_merge($operator_ids,$com_opt_ids->pluck('operator_id')->toArray()); 
+            }
+        }
+        
+        // $reports = PnlSummeryMonth::filteroperator($operator_ids)
+        // ->filterDateRange($start_date,$end_date)
+        // ->orderBy('id_operator')
+        // ->orderBy('date', 'ASC')
+        // ->get()->toArray();
+        // // dd($reports);
+        // $reportsByIDs = $this->getReportsByOperator($reports);
+        
+        $Operators = Operator::Status(1)->get();
+        
+        $firstDayoftheyear = Carbon::now()->startOfYear()->format('Y-m-d');
+        $start_date = $firstDayoftheyear;
+        $startColumnDateDisplay = $firstDayoftheyear;
+        $end_date = Carbon::now()->format('Y-m-d');
+        $month = Carbon::now()->format('F Y');
+
+        $datesIndividual = Utility::getRangeDates($startColumnDateDisplay,$end_date);
+        $no_of_months = Utility::getRangeMonthsNo($datesIndividual);
+
+        $monthList = array();
+
+        foreach ($no_of_months as $key => $no_of_month) {
+            $month_key = $no_of_month['date'];
+            $monthList[] = $month_key;
+        }
+
+        $allMonthlyData = PnlSummeryMonth::filteroperator($operator_ids)
+                        ->Months($monthList)
+                        ->User(0)
+                        ->get()->toArray();
+        
+        $reportsMonthData = $this->rearrangeOperatorMonth($allMonthlyData);
+        $monthdata = $reportsMonthData;
+        // dd($monthdata);
+
+        if(!empty($Operators))
+        {
+            foreach($Operators as $operator)
+            {
+                $tmpOperators = array();
+                $OperatorCountry = array();
+
+                $operator_id = $operator->id_operator;
+                $tmpOperators['operator'] = $operator;
+                if(!isset($com_operators[$operator_id]))
+                {
+                    // if The Operator not founds in that array
+                    continue;
+                }
+                $tmpOperators['company'] = $com_operators[$operator_id];
+                $country_id  = $operator->country_id;
+                $contain_id = Arr::exists($countries, $country_id);
+                
+                if($contain_id)
+                {
+                    $tmpOperators['country']=$countries[$country_id];
+                    $OperatorCountry = $countries[$country_id];
+                }
+
+                $reportsColumnData = $this->getPNLReportsDateWise($operator,$no_of_months,$monthdata,$OperatorCountry);
+                // dd($reportsColumnData);
+                $tmpOperators['month_string'] = $month;
+
+                $total_avg_rev_usd = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['end_user_rev_usd'],$startColumnDateDisplay,$end_date);
+                $tmpOperators['end_user_rev_usd']['dates'] = $reportsColumnData['end_user_rev_usd'];
+                $tmpOperators['end_user_rev_usd']['total'] = $total_avg_rev_usd['sum'];
+                $tmpOperators['end_user_rev_usd']['t_mo_end'] = $total_avg_rev_usd['T_Mo_End'];
+                $tmpOperators['end_user_rev_usd']['avg'] = $total_avg_rev_usd['avg'];
+
+
+                $total_avg_rev = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['end_user_rev'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['end_user_rev']['dates'] = $reportsColumnData['end_user_rev'];
+                $tmpOperators['end_user_rev']['total'] = $total_avg_rev['sum'];
+                $tmpOperators['end_user_rev']['t_mo_end'] = $total_avg_rev['T_Mo_End'];
+                $tmpOperators['end_user_rev']['avg'] = $total_avg_rev['avg'];
+
+
+                $total_avg_gros_rev_usd = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['gros_rev_usd'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['gros_rev_usd']['dates'] = $reportsColumnData['gros_rev_usd'];
+                $tmpOperators['gros_rev_usd']['total'] = $total_avg_gros_rev_usd['sum'];
+                $tmpOperators['gros_rev_usd']['t_mo_end'] = $total_avg_gros_rev_usd['T_Mo_End'];
+                $tmpOperators['gros_rev_usd']['avg'] = $total_avg_gros_rev_usd['avg'];
+
+
+                $total_avg_gros_rev = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['gros_rev'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['gros_rev']['dates'] = $reportsColumnData['gros_rev'];
+                $tmpOperators['gros_rev']['total'] = $total_avg_gros_rev['sum'];
+                $tmpOperators['gros_rev']['t_mo_end'] = $total_avg_gros_rev['T_Mo_End'];
+                $tmpOperators['gros_rev']['avg'] = $total_avg_gros_rev['avg'];
+
+
+                $total_avg_cost_campaign = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['cost_campaign'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['cost_campaign']['dates'] = $reportsColumnData['cost_campaign'];
+                $tmpOperators['cost_campaign']['total'] = $total_avg_cost_campaign['sum'];
+                $tmpOperators['cost_campaign']['t_mo_end'] = $total_avg_cost_campaign['T_Mo_End'];
+                $tmpOperators['cost_campaign']['avg'] = $total_avg_cost_campaign['avg'];
+
+
+                $total_avg_other_cost = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['other_cost'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['other_cost']['dates'] = $reportsColumnData['other_cost'];
+                $tmpOperators['other_cost']['total'] = $total_avg_other_cost['sum'];
+                $tmpOperators['other_cost']['t_mo_end'] = $total_avg_other_cost['T_Mo_End'];
+                $tmpOperators['other_cost']['avg'] = $total_avg_other_cost['avg'];
+
+
+                $total_avg_hosting_cost = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['hosting_cost'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['hosting_cost']['dates'] = $reportsColumnData['hosting_cost'];
+                $tmpOperators['hosting_cost']['total'] = $total_avg_hosting_cost['sum'];
+                $tmpOperators['hosting_cost']['t_mo_end'] = $total_avg_hosting_cost['T_Mo_End'];
+                $tmpOperators['hosting_cost']['avg'] = $total_avg_hosting_cost['avg'];
+
+
+                $total_avg_content = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['content'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['content']['dates'] = $reportsColumnData['content'];
+                $tmpOperators['content']['total'] = $total_avg_content['sum'];
+                $tmpOperators['content']['t_mo_end'] = $total_avg_content['T_Mo_End'];
+                $tmpOperators['content']['avg'] = $total_avg_content['avg'];
+
+
+                $total_avg_rnd = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['rnd'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['rnd']['dates'] = $reportsColumnData['rnd'];
+                $tmpOperators['rnd']['total'] = $total_avg_rnd['sum'];
+                $tmpOperators['rnd']['t_mo_end'] = $total_avg_rnd['T_Mo_End'];
+                $tmpOperators['rnd']['avg'] = $total_avg_rnd['avg'];
+
+
+                $total_avg_bd = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['bd'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['bd']['dates'] = $reportsColumnData['bd'];
+                $tmpOperators['bd']['total'] = $total_avg_bd['sum'];
+                $tmpOperators['bd']['t_mo_end'] = $total_avg_bd['T_Mo_End'];
+                $tmpOperators['bd']['avg'] = $total_avg_bd['avg'];
+
+
+                $total_avg_platform = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['platform'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['platform']['dates'] = $reportsColumnData['platform'];
+                $tmpOperators['platform']['total'] = $total_avg_platform['sum'];
+                $tmpOperators['platform']['t_mo_end'] = $total_avg_platform['T_Mo_End'];
+                $tmpOperators['platform']['avg'] = $total_avg_platform['avg'];
+
+
+                $total_avg_pnl = UtilityReportsMonthly::calculateTotalAVG($operator,$reportsColumnData['pnl'],$startColumnDateDisplay,$end_date);
+
+                $tmpOperators['pnl']['dates'] = $reportsColumnData['pnl'];
+                $tmpOperators['pnl']['total'] = $total_avg_pnl['sum'];
+                $tmpOperators['pnl']['t_mo_end'] = $total_avg_pnl['T_Mo_End'];
+                $tmpOperators['pnl']['avg'] = $total_avg_pnl['avg'];
+
+                // dd($tmpOperators);
+                $sumemry[] = $tmpOperators;
+            }
+        }
+
+        // dd($sumemry);
+
+        // Company Sum from Operator array
+        $displayCompanies = array();
+        $SelectedCompanies=array();
+        $RowCompanyData = array();
+
+        if(!empty($sumemry))
+        {
+            foreach ($sumemry as $key => $sumemries) {
+                // dd($sumemries);
+                $company_id = $sumemries['company']['id'];
+                $SelectedCompanies[$company_id] = $sumemries['company'];
+                $displayCompanies[$company_id][] = $sumemries;
+            }
+        }
+
+        // dd($SelectedCompanies);
+
+        if(!empty($SelectedCompanies))
+        {
+            foreach ($SelectedCompanies as $key => $SelectedCompany)
+            {
+                $tempDataArr = array();
+                $company_id = $SelectedCompany['id'];
+                $dataRowSum = UtilityReports::summaryDataSum($displayCompanies[$company_id]);
+                $tempDataArr['company'] = $SelectedCompany;
+                $tempDataArr['month_string'] = $month;
+                $tempDataArr = array_merge($tempDataArr,$dataRowSum);
+                $RowCompanyData[] = $tempDataArr;
+            }
+            
+        }
+        
+        // dd($RowCompanyData);
+        
+        $sumemry = $RowCompanyData;
+        $sumOfSummaryData = UtilityReports::summaryDataSum($sumemry);
+        $no_of_days = $no_of_months;
+        // dd($sumemry);
+        // dd($sumOfSummaryData);
+
+        return view('report.monthly_company_pnlreport', compact('no_of_days','sumemry','sumOfSummaryData','data'));
+    }
+
+    function getPNLReportsDateWise($operator,$no_of_months,$reportsByIDs,$OperatorCountry)
+    {
+         
+        $usdValue = $OperatorCountry['usd'];
+        if(!empty($no_of_months))
+        {
+            $allColumnData=array();
+            $end_user_rev_usd_Arr = array();
+            $end_user_rev_Arr = array();
+            $gros_rev_usd_Arr = array();
+            $gros_rev_Arr = array();
+            $cost_campaign_Arr = array();
+            $other_cost_Arr = array();
+            $hosting_cost_Arr = array();
+            $content_Arr = array();
+            $rnd_Arr = array();
+            $bd_Arr = array();
+            $platform_Arr = array();
+            $pnl_Arr = array();
+            $id_operator =$operator->id_operator;
+
+            foreach($no_of_months as $months)
+            {
+                $keys = $id_operator.".".$months['date'];
+                $summariserow = Arr::get($reportsByIDs, $keys, 0);
+                if(isset($summariserow[0]))
+                {
+                    $summariserow = $summariserow[0];
+                }
+
+               // dd($summariserow);
+
+                $end_user_rev_usd = isset($summariserow['rev_usd']) ? $summariserow['rev_usd'] : 0;
+                $end_user_rev_usd = sprintf('%0.2f', $end_user_rev_usd);
+
+                $end_user_rev = isset($summariserow['rev']) ? $summariserow['rev'] : 0;
+                $end_user_rev = sprintf('%0.2f', $end_user_rev);
+
+                $gros_rev_usd = isset($summariserow['share']) ? $summariserow['share'] : 0;
+                $gros_rev_usd = sprintf('%0.2f', $gros_rev_usd);
+
+                $gros_rev = isset($summariserow['lshare']) ? $summariserow['lshare'] : 0;
+                $gros_rev = sprintf('%0.2f', $gros_rev);
+
+                $cost_campaign = isset($summariserow['cost_campaign']) ? $summariserow['cost_campaign'] : 0;
+                $cost_campaign = sprintf('%0.2f', $cost_campaign);
+
+                $other_cost = isset($summariserow['other_cost']) ? $summariserow['other_cost'] : 0;
+                $other_cost = sprintf('%0.2f', $other_cost);
+
+                $hosting_cost = isset($summariserow['hosting_cost']) ? $summariserow['hosting_cost'] : 0;
+                $hosting_cost = sprintf('%0.2f', $hosting_cost);
+
+                $content = isset($summariserow['content']) ? $summariserow['content'] : 0;
+                $content = sprintf('%0.2f', $content);
+
+                $rnd = isset($summariserow['rnd']) ? $summariserow['rnd'] : 0;
+                $rnd = sprintf('%0.2f', $rnd);
+
+                $bd = isset($summariserow['bd']) ? $summariserow['bd'] : 0;
+                $bd = sprintf('%0.2f', $bd);
+
+                $platform = isset($summariserow['platform']) ? $summariserow['platform'] : 0;
+                $platform = sprintf('%0.2f', $platform);
+
+                $pnl = isset($summariserow['pnl']) ? $summariserow['pnl'] : 0;
+                $pnl = sprintf('%0.2f', $pnl);
+
+                $end_user_rev_usd_Arr[$months['date']]['value'] = $end_user_rev_usd;
+                $end_user_rev_usd_Arr[$months['date']]['class'] = "bg-hui";
+
+                $end_user_rev_Arr[$months['date']]['value'] = $end_user_rev;
+                $end_user_rev_Arr[$months['date']]['class'] = "bg-hui";
+
+                $gros_rev_usd_Arr[$months['date']]['value'] = $gros_rev_usd;
+                $gros_rev_usd_Arr[$months['date']]['class'] = "bg-hui";
+
+                $gros_rev_Arr[$months['date']]['value'] = $gros_rev;
+                $gros_rev_Arr[$months['date']]['class'] = "bg-hui";
+
+                $cost_campaign_Arr[$months['date']]['value'] = $cost_campaign;
+                $cost_campaign_Arr[$months['date']]['class'] = "bg-hui";
+
+                $other_cost_Arr[$months['date']]['value'] = $other_cost;
+                $other_cost_Arr[$months['date']]['class'] = "bg-hui";
+
+                $hosting_cost_Arr[$months['date']]['value'] = $hosting_cost;
+                $hosting_cost_Arr[$months['date']]['class'] = "bg-hui";
+
+                $content_Arr[$months['date']]['value'] = $content;
+                $content_Arr[$months['date']]['class'] = "bg-hui";
+
+                $rnd_Arr[$months['date']]['value'] = $rnd;
+                $rnd_Arr[$months['date']]['class'] = "bg-hui";
+
+                $bd_Arr[$months['date']]['value'] = $bd;
+                $bd_Arr[$months['date']]['class'] = "bg-hui";
+
+                $platform_Arr[$months['date']]['value'] = $platform;
+                $platform_Arr[$months['date']]['class'] = "bg-hui";
+
+                $pnl_Arr[$months['date']]['value'] = $pnl;
+                $pnl_Arr[$months['date']]['class'] = "bg-hui";
+            }
+
+            $allColumnData['end_user_rev_usd'] = $end_user_rev_usd_Arr;
+            $allColumnData['end_user_rev'] = $end_user_rev_Arr;
+            $allColumnData['gros_rev_usd'] = $gros_rev_usd_Arr;
+            $allColumnData['gros_rev'] = $gros_rev_Arr;
+            $allColumnData['cost_campaign'] = $cost_campaign_Arr;
+            $allColumnData['other_cost'] = $other_cost_Arr;
+            $allColumnData['hosting_cost'] = $hosting_cost_Arr;
+            $allColumnData['content'] = $content_Arr;
+            $allColumnData['rnd'] = $rnd_Arr;
+            $allColumnData['bd'] = $bd_Arr;
+            $allColumnData['platform'] = $platform_Arr;
+            $allColumnData['pnl'] = $pnl_Arr;
+            return $allColumnData;
+        }
+    }
+
+    // get report using operator id
+    function rearrangeOperatorMonth($reports)
+    {
+        if(!empty($reports))
+        {
+            $reportsResult = array();
+            $tempreport = array();
+            foreach($reports as $report)
+            {
+                $tempreport[$report['id_operator']][$report['key']] = $report;
+            }
+
+            $reportsResult =  $tempreport;
+            return $reportsResult;
+        }
+    }
+}

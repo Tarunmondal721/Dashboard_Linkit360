@@ -1,0 +1,105 @@
+body {
+    margin: 0;
+    padding: 0;
+    font-family: "Poppins", sans-serif;
+    background-color: #fff;
+}
+
+.colom-notification {
+    word-wrap: break-word;
+    min-width: 200px;
+    max-width: 200px;
+}
+
+a {
+    text-decoration: none;
+}
+
+.loader-bg {
+    background-color: rgba(255, 255, 255, 0.9);
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 999;
+}
+
+.loader-bg .loader-logo {
+    padding: 0;
+    margin: 0;
+}
+
+.loader-bg .loader-text {
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+    color: #000;
+}
+
+.threedotloader {
+    margin: 0 auto;
+    width: 5.6em;
+}
+
+.threedotloader .dot {
+    width: 1.4em;
+    height: 1.4em;
+    border-radius: 1.4em;
+    background-color: rgb(48, 48, 48);
+    transform: scale(0);
+    display: inline-block;
+    animation: dotanim 1.6s infinite ease-in-out;
+}
+
+.threedotloader .dot:nth-child(1) {
+    animation-delay: 0s;
+}
+
+.threedotloader .dot:nth-child(2) {
+    animation-delay: 0.25s;
+}
+
+.threedotloader .dot:nth-child(3) {
+    animation-delay: 0.5s;
+}
+
+.threedotloader .dot:nth-child(4) {
+    animation-delay: 0.75s;
+}
+
+@keyframes dotanim {
+    0% {
+        transform: scale(0);
+    }
+    50% {
+        transform: scale(1);
+    }
+    90% {
+        transform: scale(0);
+    }
+    100% {
+        transform: scale(0);
+    }
+}
+
+.loader-bg .dot-padding {
+    padding: 10px 0px;
+}
+
+@media only screen and (min-width: 769px) {
+    .styleButton {
+        margin-top: 55px !important;
+    }
+}
+.nav-pills > li.active > a {
+    color: red;
+}
+
+.datatableManual th {
+    cursor: move;
+}
